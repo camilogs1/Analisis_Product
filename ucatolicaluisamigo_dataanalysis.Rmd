@@ -1,0 +1,769 @@
+---
+title: "Análisis de la Producción científica de la UCLA"
+author: "Sebastian Robledo"
+date: "1/25/2022"
+output: 
+  html_document:
+            toc: TRUE
+            toc_float: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(tidygraph)
+library(igraph)
+library(DT)
+library(visNetwork)
+library(ggraph)
+library(rcrossref)
+library(purrr)
+library(vip)
+library(lubridate)
+library(yardstick)
+library(psych)
+library(bestNormalize)
+library(performance)
+library(report)
+library(plotly)
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+papers <- 
+  read_csv("https://docs.google.com/spreadsheets/d/17b_d24WF2dRBedatAqgArWodAaAn6-o0/export?format=csv&gid=1924642330") |> 
+  filter(ano > 2014) 
+
+researchers <- 
+  read_csv("https://docs.google.com/spreadsheets/d/17b_d24WF2dRBedatAqgArWodAaAn6-o0/export?format=csv&gid=1531675683") |> 
+  mutate(universidad = "ucla")
+```
+
+# Análisis descriptivo 
+
+## Investigadores en internos y externos
+
+```{r, echo=FALSE}
+authors_ucla_others <- 
+  papers |> 
+  select(id, autores, ano) |> 
+  separate_rows(autores, sep = ", ") |> 
+  group_by(id) |> 
+  filter(n() > 1) |> 
+  left_join(researchers |> 
+              select(integrantes, universidad, grupo), 
+            by = c("autores" = "integrantes")) |>
+  mutate(universidad = if_else(is.na(universidad), "otra", universidad),
+         grupo = if_else(is.na(grupo), "Sin_grupo", grupo)) |>
+  ungroup() |> 
+  select(-id) |> 
+  group_by(ano) |> 
+  count(universidad, name = "otra") |>
+  mutate(universidad = paste0(otra, collapse = ",")) |> 
+  select(ano, universidad) |> 
+  unique() |> 
+  separate(universidad, into = c("universidad", "otra"), sep = ",") |> 
+  ungroup() |> 
+  transform(ano = as.character(ano),
+            universidad = as.numeric(universidad),
+            otra = as.numeric(otra))
+
+fig <- plot_ly(authors_ucla_others, x = ~ano,y = ~otra, type = 'bar',
+               name ="Invertigador externo") |> 
+  add_trace(y = ~universidad, name="Universidad Luis Amigó") |> 
+  layout(xaxis = list(title="Año"),
+  yaxis = list(title='Investigadores'), barmode = 'group')
+fig
+
+```
+
+## Calidad de producción anual
+
+```{r, echo=FALSE}
+papers |> 
+  select(ano, SJR_Q) |> 
+  group_by(ano, SJR_Q) |> 
+  count() |> 
+  filter(SJR_Q != "-",
+         SJR_Q != "Sin categoria") |> 
+  arrange(ano) |> 
+  rename(total = n) |> 
+  ggplot(aes(x = factor(ano), y = total, fill = SJR_Q)) +
+  geom_bar(stat = "identity", 
+           position = "dodge") +
+  geom_text(aes(label = total), 
+            vjust = 1.5,
+            position = position_dodge(.9)) +
+  theme_bw()
+```
+
+
+# Red Social Académica
+
+Creamos la red social y revisamos sus características
+
+```{r, echo=FALSE}
+authors_sep <-  
+  papers |> 
+  select(id, autores) |> 
+  separate_rows(autores, sep = ", ")
+```
+
+```{r, echo=FALSE}
+authors_graph_tbl <- 
+  papers |> 
+  select(id, autores) |> 
+  separate_rows(autores, sep = ", ") |> 
+  group_by(id) |> 
+  filter(n() > 1) |> 
+  expand(from = autores, to = autores) |> 
+  filter(from != to) |> 
+  ungroup() |> 
+  select(-id) |> 
+  graph_from_data_frame(directed = FALSE) |> 
+  as_tbl_graph() |> 
+  convert(to_simple) |> 
+  activate(nodes) |> 
+  left_join(researchers |> 
+              select(integrantes, universidad, grupo), 
+            by = c("name" = "integrantes")) |>
+  mutate(universidad = if_else(is.na(universidad), "otra", universidad),
+         grupo = if_else(is.na(grupo), "Sin_grupo", grupo),
+         components = group_components(type = "weak")) |> 
+  filter(components == 1)
+```
+
+```{r, echo=FALSE}
+nodes<- 
+  authors_graph_tbl |> 
+  activate(nodes) |> 
+  as_tibble() |> 
+  rename(author = name) |> 
+  rownames_to_column("name")
+
+edges <- 
+  authors_graph_tbl |> 
+  activate(edges) |> 
+  as_tibble()
+
+# graph_from_data_frame(d = edges, 
+#                       directed = FALSE, 
+#                       vertices = nodes) |> 
+#   write_graph("output/academic_social_network.graphml", 
+#               "graphml")
+
+```
+
+Visualización de la red social académica entre los profesores de la U. Solo los profesores que están conectados.
+
+```{r, echo=FALSE}
+nodes <- 
+  authors_graph_tbl |> 
+  activate(nodes) |>
+  mutate(id = row_number()) |> 
+  data.frame() |> 
+  rename(label = name) |> 
+  select(id, label, universidad) |> 
+  mutate(color = if_else(universidad == "ucla", "blue", "red"))
+
+edges <- 
+  authors_graph_tbl |> 
+  activate(edges) |> 
+  data.frame() |> 
+  select(from, to) 
+
+visNetwork(nodes = nodes, 
+           edges = edges, 
+           height = "500px") |>
+  visIgraphLayout(layout = "layout_with_fr") |> 
+  visOptions(highlightNearest = TRUE, selectedBy = "label" ) |> 
+  visInteraction(navigationButtons = TRUE, multiselect = TRUE)
+```
+
+Solo profesores de la Luis Amigó
+
+```{r, echo=FALSE}
+nodes_luis <- 
+  nodes |> 
+  filter(universidad == "ucla")
+
+visNetwork(nodes = nodes_luis, 
+           edges = edges, 
+           height = "500px") |>
+  visIgraphLayout(layout = "layout_with_fr") |> 
+  visOptions(highlightNearest = TRUE, selectedBy = "label" ) |> 
+  visInteraction(navigationButtons = TRUE, multiselect = TRUE)
+```
+
+### Características globales
+
+### Características locales
+
+Buscamos los investigadores más populares de acuerdo a la cantidad de conexiones que han generado.
+
+De acuerdo a los datos presentados en la tabla, la investigadora con más co-autores es Carmen Ysabel Martinez de Merino.
+
+```{r, echo=FALSE}
+authors_graph_tbl |> 
+  activate(nodes) |> 
+  mutate(degree = centrality_degree(), 
+         betweenness = round(centrality_betweenness(), 
+                             digits = 2)) |>
+  arrange(desc(degree)) |> 
+  data.frame() |> 
+  select(Investigador = name,
+         grupo,
+         Grado = degree,
+         "Intermediación" = betweenness,
+         Cluster = components) |>
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+```
+
+# Investigadores más productivos
+
+This analyses is between 2016 and 2021. We want to see quality
+
+```{r, echo=FALSE}
+researchers_1 <-  
+  researchers |> 
+  select(integrantes, grupo)
+
+
+papers_1 <- # We need to split autores from papers
+  papers |> 
+  select(grupo,
+         categoria_revista, 
+         SJR_Q , 
+         ano, 
+         autores) |> 
+  separate_rows(autores, sep = ", ") |>  # Separate researchers 
+  select(grupo,
+         integrantes = autores, 
+         ano, 
+         categoria_revista, 
+         SJR_Q)
+
+paper_publindex <- 
+  researchers_1 |> 
+  left_join(papers_1, by = c("integrantes" = "integrantes", 
+                             "grupo" = "grupo")) |> 
+  select(integrantes,
+         ano, 
+         categoria_revista) |> 
+  group_by(integrantes, 
+           ano) |> 
+  count(categoria_revista) |> 
+  pivot_wider(names_from = categoria_revista, 
+              values_from = n) |> 
+  replace_na(list(A1 = 0, 
+                  A2 = 0, 
+                  C = 0, 
+                  "Sin categoria" = 0, 
+                  B = 0)) |> 
+  select(integrantes, ano, A1, A2, B, C, "Sin categoria") |> 
+  arrange(desc(A1))
+
+paper_scimago <- 
+  researchers_1 |> 
+  left_join(papers_1, by = c("integrantes" = "integrantes", 
+                             "grupo" = "grupo")) |> 
+  select(integrantes,
+         ano, 
+         SJR_Q) |> 
+  group_by(integrantes, 
+           ano) |> 
+  count(SJR_Q) |>
+  na.omit() |> 
+  pivot_wider(names_from = SJR_Q, 
+              values_from = n) |> 
+  replace_na(list(Q1 = 0, 
+                  Q2 = 0, 
+                  Q3 = 0, 
+                  "Sin categoria" = 0, 
+                  Q4 = 0)) |> 
+  select(integrantes, ano, Q1, Q2, Q3, Q4, "Sin categoria") |> 
+  arrange(desc(Q1))
+```
+
+## Producción general
+
+Producción top de los 10 mejores investigadores
+
+```{r, echo=FALSE}
+q1_top <- 
+  paper_scimago |> 
+  filter(ano >= 2016) |> 
+  group_by(integrantes) |> 
+  summarise(Q1_total = sum(Q1)) |> 
+  filter(Q1_total != 0) |> 
+  arrange(desc(Q1_total))
+
+q2_top <- 
+  paper_scimago |> 
+  filter(ano >= 2016) |> 
+  group_by(integrantes) |> 
+  summarise(Q2_total = sum(Q2)) |> 
+  filter(Q2_total != 0) |> 
+  arrange(desc(Q2_total))
+
+a1_top <- 
+  paper_publindex |> 
+  filter(ano >= 1016) |> 
+  group_by(integrantes) |> 
+  summarise(A1_total = sum(A1)) |> 
+  filter(A1_total != 0) |> 
+  arrange(desc(A1_total))
+
+a2_top <- 
+  paper_publindex |> 
+  filter(ano >= 2016) |> 
+  group_by(integrantes) |> 
+  summarise(A2_total = sum(A2)) |> 
+  filter(A2_total != 0) |> 
+  arrange(desc(A2_total))
+
+# Merging all datasets
+
+top_researchers <- 
+  q1_top |> 
+  left_join(q2_top, by = "integrantes") |> 
+  left_join(a1_top, by = "integrantes") |> 
+  left_join(a2_top, by = "integrantes") |> 
+  rename(Q1 = Q1_total,
+         Q2 = Q2_total,
+         A1 = A1_total,
+         A2 = A2_total) |> 
+  replace_na(replace = list(Q1 = 0,
+                            Q2 = 0,
+                            A1 = 0,
+                            A2 = 0))
+
+top_researchers |> 
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+
+```
+
+## Publindex production
+
+```{r, echo=FALSE}
+paper_publindex |> 
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+```
+
+## Scimago production
+
+Tabla
+
+```{r, echo=FALSE}
+paper_scimago |> 
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+```
+
+# Análisis inferencial
+
+## Regressión lineal
+
+### Normality
+
+```{r}
+researcher_model_1 <- 
+  researchers |> 
+  select(articulos, inicio_vinculacion) |> 
+  separate_rows(inicio_vinculacion, sep = "; ") |>
+  separate_rows(articulos, sep = "; ") |> 
+  mutate(inicio_vinculacion = ymd(inicio_vinculacion),
+         dias_vinculados = today() - inicio_vinculacion) |> 
+  select(-inicio_vinculacion) |> 
+  mutate(articulos = as.numeric(articulos),
+         dias_vinculados = as.numeric(dias_vinculados))
+```
+
+Checking histograms
+
+```{r}
+par(mfrow = c(1,2))
+researcher_model_1 |> 
+  ggplot(aes(x = articulos)) +
+  geom_histogram()
+researcher_model_1 |> 
+  ggplot(aes(x = dias_vinculados)) +
+  geom_histogram()
+```
+
+Checking Q-Q plot
+
+```{r}
+plot.new()
+par(mfrow = c(1,2))
+
+qqnorm(researcher_model_1$articulos, main='Normal')
+qqline(researcher_model_1$articulos)
+
+qqnorm(researcher_model_1$dias_vinculados, main='Non-normal')
+qqline(researcher_model_1$dias_vinculados)
+```
+
+Shapiro-wilk test
+
+```{r}
+shapiro.test(researcher_model_1$articulos)
+shapiro.test(researcher_model_1$dias_vinculados)
+```
+
+p-value less than 0.05 - not normally distributed
+
+We need to transform the data
+
+### Transformation
+
+```{r}
+articulos_bestnor <- 
+  bestNormalize(researcher_model_1$articulos)
+
+articulos_trans <- 
+  predict(articulos_bestnor, 
+          newdata = articulos_bestnor$x.t, 
+          inverse = TRUE)
+
+dias_vinculados_bestnor <- 
+  bestNormalize(researcher_model_1$dias_vinculados)
+
+dias_vinculados_trans <- 
+  predict(dias_vinculados_bestnor, newdata = dias_vinculados_bestnor$x.t, 
+          inverse = TRUE)
+researcher_trans <- 
+  tibble(articulos = articulos_trans,
+         dias_vinculados = dias_vinculados_trans)
+```
+
+### Linear model - Traditional
+
+```{r}
+model_1 <- 
+  lm(articulos ~ dias_vinculados, researcher_trans)
+
+summary(model_1)
+```
+
+Checking supositions
+
+```{r}
+#check_model(model_1)
+```
+
+Report
+
+```{r}
+report(model_1)
+```
+
+### Tidymodel
+
+```{r}
+researchres_split <- 
+  initial_split(researcher_trans, 
+                prop = 0.75, 
+                strata = articulos)
+
+researchers_training <- 
+  researchres_split |> 
+  training()
+
+researchers_testing <- 
+  researchres_split |> 
+  testing()
+```
+
+```{r}
+lm_model <- 
+  linear_reg() |> 
+  set_engine("lm") |> 
+  set_mode("regression")
+
+lm_fit <- 
+  lm_model |> 
+  fit(articulos ~ dias_vinculados, 
+      researchers_training)
+```
+
+```{r}
+tidy(lm_fit)
+```
+
+Making predictions
+
+```{r}
+researchers_predictions <- 
+  lm_fit |> 
+  predict(new_data = researchers_testing)
+```
+
+```{r}
+researchers_test_results <- 
+  researchers_testing |>
+  select(articulos, dias_vinculados) |> 
+  bind_cols(researchers_predictions)
+```
+
+Evaluating the model performance
+
+```{r}
+researchers_test_results |> 
+  yardstick::rmse(truth = articulos,
+                  estimate = .pred)
+```
+
+r2 metric
+
+```{r}
+researchers_test_results |> 
+  rsq(truth = articulos, 
+      estimate = .pred)
+```
+
+```{r}
+ggplot(researchers_test_results, aes(x = articulos, y = .pred)) +
+  geom_point(alpha = 0.5) + 
+  geom_abline(color = 'blue', linetype = 2) +
+  coord_obs_pred()  +
+  labs(x = 'articulos actuales', y = 'Predicted articles')
+```
+
+```{r}
+lm_last_fit <- 
+  lm_model |> 
+  last_fit(articulos ~ dias_viculados, 
+           split = researchres_split)
+```
+
+```{r}
+lm_last_fit |> 
+  collect_metrics()
+```
+
+```{r}
+lm_last_fit |> 
+  collect_predictions()
+```
+
+## Logistic regression
+
+We need to transform the values of articles variable
+
+```{r}
+researcher_model_2 <- 
+  researcher_model_1 |> 
+  mutate(articulos_bin = if_else(articulos <= 3, 
+                                 "low", 
+                                 "high"),
+         articulos_bin = as_factor(articulos_bin)) |> 
+  select(-articulos)
+```
+
+Data resampling
+
+```{r}
+researcher_bin_split <- 
+  initial_split(researcher_model_2,
+                prop = 0.75, 
+                strata = "articulos_bin")
+
+researcher_bin_training <- 
+  researcher_bin_split |> 
+  training()
+
+researcher_bin_test <- 
+  researcher_bin_split |> 
+  testing()
+```
+
+Logistic Regression model
+
+```{r}
+logistic_model <- 
+  logistic_reg() |> 
+  set_engine("glm") |> 
+  set_mode("classification")
+```
+
+Model fitting
+
+```{r}
+logistic_fit <- 
+  logistic_model |> 
+  parsnip::fit(articulos_bin ~ dias_vinculados, 
+               data = researcher_bin_training)
+```
+
+Predicting outcome categories
+
+```{r}
+class_preds <- 
+  logistic_fit |> 
+  predict(new_data = researcher_bin_test,
+          type = "class")
+```
+
+Estimated probabilities
+
+```{r}
+prob_preds <- 
+  logistic_fit |> 
+  predict(new_data = researcher_bin_test,
+          type = "prob")
+```
+
+Combining results
+
+```{r}
+researcher_bin_results <- 
+  researcher_bin_test |> 
+  bind_cols(class_preds, prob_preds)
+```
+
+Assessing model fit
+
+```{r}
+levels(researcher_model_2$articulos_bin)
+```
+
+Confusion matrix
+
+```{r}
+conf_mat(researcher_bin_results, 
+         truth = articulos_bin, 
+         estimate = .pred_class)
+```
+
+62.5% correctly classified
+
+### Accuracy
+
+```{r}
+accuracy(researcher_bin_results, 
+         truth = articulos_bin, 
+         estimate = .pred_class)
+```
+
+### Sensitivity
+
+Sensitivity proportion of all positive cases that were correctly classified of reserachers who had high productivity, what proportion did our model predict correctly?
+
+```{r}
+sens(researcher_bin_results, 
+     truth = articulos_bin, 
+     estimate = .pred_class)
+```
+
+
+### Specificity
+
+```{r}
+spec(researcher_bin_results, 
+     truth = articulos_bin, 
+     estimate = .pred_class)
+```
+
+
+Creating a metric set
+
+```{r}
+custom_metrics <- 
+  metric_set(accuracy, sens, spec)
+
+custom_metrics(researcher_bin_results, 
+               truth = articulos_bin,
+               estimate = .pred_class)
+```
+
+```{r}
+conf_mat(researcher_bin_results, 
+         truth = articulos_bin,
+         estimate = .pred_class) |> 
+  summary()
+```
+
+### Visualizing model
+
+Plotting the confusion matrix
+
+```{r}
+conf_mat(researcher_bin_results, 
+         truth = articulos_bin,
+         estimate = .pred_class) |> 
+  autoplot(type = "heatmap")
+```
+
+```{r}
+conf_mat(researcher_bin_results, 
+         truth = articulos_bin,
+         estimate = .pred_class) |> 
+  autoplot(type = "mosaic")
+```
+
+Calculating performance
+
+```{r}
+researcher_bin_results |> 
+  roc_curve(truth = articulos_bin, .pred_high) |> 
+  autoplot()
+```
+
+```{r}
+
+# Load file wos.csv and save it as df
+
+
+```
+
+
+```{r}
+roc_auc(researcher_bin_results, 
+        truth = articulos_bin, 
+        .pred_high)
+```
