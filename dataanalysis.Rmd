@@ -32,6 +32,7 @@ library(bestNormalize)
 library(performance)
 library(report)
 library(plotly)
+library(nortest)
 ```
 
 ```{r message=FALSE, warning=FALSE, echo=FALSE}
@@ -240,7 +241,9 @@ This analyses is between 2016 and 2021. We want to see quality
 ```{r, echo=FALSE}
 researchers_1 <-  
   researchers |> 
-  select(integrantes, grupo) 
+  select(integrantes, grupo) |> 
+  separate_rows(grupo, sep = "; ") |> 
+  mutate(grupo = as.numeric(grupo))
 
 papers_1 <- # We need to split autores from papers
   papers |> 
@@ -449,8 +452,12 @@ qqline(researcher_model_1$dias_vinculados)
 Shapiro-wilk test
 
 ```{r}
-shapiro.test(researcher_model_1$articulos)
-shapiro.test(researcher_model_1$dias_vinculados)
+## pruebas de normalidad menores a 5000
+# shapiro.test(researcher_model_1$articulos)
+# shapiro.test(researcher_model_1$dias_vinculados)
+## prueba de normalidad de Anderson-Darlingp para datos mayores a 5000
+ad.test(researcher_model_1$articulos)
+ad.test(researcher_model_1$dias_vinculados)
 ```
 
 p-value less than 0.05 - not normally distributed
