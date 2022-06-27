@@ -76,7 +76,7 @@ authors_others <-
 
 fig <- plot_ly(authors_others, x = ~ano,y = ~otra, type = 'bar',
                name ="Invertigador externo") |>
-  add_trace(y = ~universidad, name="Universidad Luis Amigó") |>
+  add_trace(y = ~universidad, name="Investigador grupos BIOS") |>
   layout(xaxis = list(title="Año"),
   yaxis = list(title='Investigadores'), barmode = 'group')
 fig
@@ -161,7 +161,7 @@ graph_from_data_frame(d = edges,
 
 ```
 
-Visualización de la red social académica entre los profesores de la U. Solo los profesores que están conectados.
+Visualización de la red social académica entre los investigadores de los grupos BIOS.
 
 ```{r, echo=FALSE}
 nodes <- 
@@ -184,21 +184,6 @@ visNetwork(nodes = nodes,
            height = "500px") |>
   visIgraphLayout(layout = "layout_with_fr") |> 
   visOptions(highlightNearest = TRUE, selectedBy = "label" ) |> 
-  visInteraction(navigationButtons = TRUE, multiselect = TRUE)
-```
-
-Solo profesores de la Luis Amigó
-
-```{r, echo=FALSE}
-nodes_luis <-
-  nodes |>
-  filter(universidad == "ucla")
-
-visNetwork(nodes = nodes_luis,
-           edges = edges,
-           height = "500px") |>
-  visIgraphLayout(layout = "layout_with_fr") |>
-  visOptions(highlightNearest = TRUE, selectedBy = "label" ) |>
   visInteraction(navigationButtons = TRUE, multiselect = TRUE)
 ```
 
@@ -236,7 +221,7 @@ authors_graph_tbl |>
 
 # Investigadores más productivos
 
-This analyses is between 2016 and 2021. We want to see quality
+Estos análisis se sitúan entre 2016 y 2021. Queremos ver la calidad
 
 ```{r, echo=FALSE}
 researchers_1 <-  
@@ -424,7 +409,7 @@ researcher_model_1 <-
          dias_vinculados = as.numeric(dias_vinculados))
 ```
 
-Checking histograms
+Comprobación de los histogramas
 
 ```{r}
 par(mfrow = c(1,2))
@@ -436,7 +421,7 @@ researcher_model_1 |>
   geom_histogram()
 ```
 
-Checking Q-Q plot
+Comprobación Q-Q plot
 
 ```{r}
 plot.new()
@@ -460,9 +445,9 @@ ad.test(researcher_model_1$articulos)
 ad.test(researcher_model_1$dias_vinculados)
 ```
 
-p-value less than 0.05 - not normally distributed
+Valor p inferior a 0,05 - no está distribuido normalmente
 
-We need to transform the data
+Tenemos que transformar los datos
 
 ### Transformation
 
@@ -495,13 +480,13 @@ model_1 <-
 summary(model_1)
 ```
 
-Checking supositions
+Comprobación de suposiciones
 
 ```{r}
 check_model(model_1)
 ```
 
-Report
+Informe
 
 ```{r}
 report(model_1)
@@ -555,7 +540,7 @@ researchers_test_results <-
   bind_cols(researchers_predictions)
 ```
 
-Evaluating the model performance
+Evaluación del rendimiento del modelo
 
 ```{r}
 researchers_test_results |> 
@@ -598,7 +583,7 @@ lm_last_fit |>
 
 ## Logistic regression
 
-We need to transform the values of articles variable
+Necesitamos transformar los valores de la variable de los artículos
 
 ```{r}
 researcher_model_2 <- 
@@ -610,7 +595,7 @@ researcher_model_2 <-
   select(-articulos)
 ```
 
-Data resampling
+Remuestreo de datos
 
 ```{r}
 researcher_bin_split <- 
@@ -627,7 +612,7 @@ researcher_bin_test <-
   testing()
 ```
 
-Logistic Regression model
+Modelo de regresión logística
 
 ```{r}
 logistic_model <- 
@@ -636,7 +621,7 @@ logistic_model <-
   set_mode("classification")
 ```
 
-Model fitting
+Modelo fitting
 
 ```{r}
 logistic_fit <- 
@@ -645,7 +630,7 @@ logistic_fit <-
                data = researcher_bin_training)
 ```
 
-Predicting outcome categories
+Predicción de categorías de resultados
 
 ```{r}
 class_preds <- 
@@ -654,7 +639,7 @@ class_preds <-
           type = "class")
 ```
 
-Estimated probabilities
+Probabilidades estimadas
 
 ```{r}
 prob_preds <- 
@@ -663,7 +648,7 @@ prob_preds <-
           type = "prob")
 ```
 
-Combining results
+Combinación de resultados
 
 ```{r}
 researcher_bin_results <- 
@@ -671,7 +656,7 @@ researcher_bin_results <-
   bind_cols(class_preds, prob_preds)
 ```
 
-Assessing model fit
+Evaluación del ajuste del modelo
 
 ```{r}
 levels(researcher_model_2$articulos_bin)
@@ -687,7 +672,8 @@ conf_mat(researcher_bin_results,
 
 62.5% correctly classified
 
-![](confussion%20matrix.png)
+<!-- ![](confussion%20matrix.png) -->
+
 
 ### Accuracy
 
@@ -697,11 +683,11 @@ accuracy(researcher_bin_results,
          estimate = .pred_class)
 ```
 
-![](Accuracy.png)
+<!-- ![](Accuracy.png) -->
 
 ### Sensitivity
 
-Sensitivity proportion of all positive cases that were correctly classified of reserachers who had high productivity, what proportion did our model predict correctly?
+Sensibilidad proporción de todos los casos positivos que se clasificaron correctamente de los profesores que tenían una alta productividad, ¿qué proporción predijo correctamente nuestro modelo?
 
 ```{r}
 sens(researcher_bin_results, 
@@ -709,7 +695,7 @@ sens(researcher_bin_results,
      estimate = .pred_class)
 ```
 
-![](Sensitivity.png)
+<!-- ![](Sensitivity.png) -->
 
 ### Specificity
 
@@ -719,7 +705,7 @@ spec(researcher_bin_results,
      estimate = .pred_class)
 ```
 
-![](Specificity.png)
+<!-- ![](Specificity.png) -->
 
 Creating a metric set
 
@@ -741,7 +727,7 @@ conf_mat(researcher_bin_results,
 
 ### Visualizing model
 
-Plotting the confusion matrix
+Trazado de la matriz de confusión
 
 ```{r}
 conf_mat(researcher_bin_results, 
