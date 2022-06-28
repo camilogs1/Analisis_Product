@@ -60,7 +60,7 @@ authors_others <-
               select(integrantes, universidad, grupo),
             by = c("autores" = "integrantes")) |>
   mutate(universidad = if_else(is.na(universidad), "otra", universidad),
-         grupo = if_else(is.na(grupo), "Sin_grupo", grupo)) |>
+         grupo = if_else(is.na(grupo), "Externo", grupo)) |>
   ungroup() |>
   select(-id) |>
   group_by(ano) |>
@@ -75,7 +75,7 @@ authors_others <-
             otra = as.numeric(otra))
 
 fig <- plot_ly(authors_others, x = ~ano,y = ~otra, type = 'bar',
-               name ="Invertigador externo") |>
+               name ="Investigador externo") |>
   add_trace(y = ~universidad, name="Investigador grupos BIOS") |>
   layout(xaxis = list(title="Año"),
   yaxis = list(title='Investigadores'), barmode = 'group')
@@ -134,7 +134,7 @@ authors_graph_tbl <-
               select(integrantes, universidad, grupo), 
             by = c("name" = "integrantes")) |>
   mutate(universidad = if_else(is.na(universidad), "otra", universidad),
-         grupo = if_else(is.na(grupo), "Sin_grupo", grupo),
+         grupo = if_else(is.na(grupo), "Externo", grupo),
          components = group_components(type = "weak")) |> 
   filter(components == 1)
 ```
