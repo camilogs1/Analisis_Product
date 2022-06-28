@@ -170,8 +170,9 @@ nodes <-
   mutate(id = row_number()) |> 
   data.frame() |> 
   rename(label = name) |> 
-  select(id, label, universidad) |> 
-  mutate(color = if_else(universidad == "ucla", "blue", "red"))
+  select(id, label, universidad) 
+# |> 
+#   mutate(color = if_else(universidad == "ucla", "blue", "red"))
 
 edges <- 
   authors_graph_tbl |> 
