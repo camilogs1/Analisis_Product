@@ -13,7 +13,5 @@ researchers['universidad'] = researchers['grupo']
 
 ## Investigadores en internos y externos
 authors_others = papers[['id', 'autores', 'ano']]
-
-aux = authors_others
-aux = aux.explode('autores')
-aux = aux.groupby(['id']).mean()
+authors_others = authors_others.explode('autores')
+authors_others = authors_others.groupby(['id']).mean()

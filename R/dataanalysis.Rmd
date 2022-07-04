@@ -355,7 +355,7 @@ top_researchers |>
 
 ```
 
-## Publindex production
+## Publindex producción
 
 ```{r, echo=FALSE}
 paper_publindex |> 
@@ -372,7 +372,7 @@ paper_publindex |>
                                            "print")))
 ```
 
-## Scimago production
+## Scimago producción
 
 Tabla
 
