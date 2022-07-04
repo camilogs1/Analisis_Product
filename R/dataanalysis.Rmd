@@ -250,9 +250,11 @@ paper_publindex <-
   left_join(papers_1, by = c("integrantes" = "integrantes", 
                              "grupo" = "grupo")) |> 
   select(integrantes,
+         grupo,
          ano, 
          categoria_revista) |> 
-  group_by(integrantes, 
+  group_by(integrantes,
+           grupo,
            ano) |> 
   count(categoria_revista) |> 
   pivot_wider(names_from = categoria_revista, 
@@ -262,7 +264,7 @@ paper_publindex <-
                   C = 0, 
                   "Sin categoria" = 0, 
                   B = 0)) |> 
-  select(integrantes, ano, A1, A2, B, C, "Sin categoria") |> 
+  select(integrantes, grupo, ano, A1, A2, B, C, "Sin categoria") |> 
   arrange(desc(A1))
 
 paper_scimago <- 
@@ -270,9 +272,11 @@ paper_scimago <-
   left_join(papers_1, by = c("integrantes" = "integrantes", 
                              "grupo" = "grupo")) |> 
   select(integrantes,
+         grupo,
          ano, 
          SJR_Q) |> 
-  group_by(integrantes, 
+  group_by(integrantes,
+           grupo,
            ano) |> 
   count(SJR_Q) |>
   na.omit() |> 
@@ -283,7 +287,7 @@ paper_scimago <-
                   Q3 = 0, 
                   "Sin categoria" = 0, 
                   Q4 = 0)) |> 
-  select(integrantes, ano, Q1, Q2, Q3, Q4, "Sin categoria") |> 
+  select(integrantes, grupo, ano, Q1, Q2, Q3, Q4, "Sin categoria") |> 
   arrange(desc(Q1))
 ```
 
@@ -295,7 +299,7 @@ Producción top de los 10 mejores investigadores
 q1_top <- 
   paper_scimago |> 
   filter(ano >= 2016) |> 
-  group_by(integrantes) |> 
+  group_by(integrantes, grupo) |> 
   summarise(Q1_total = sum(Q1)) |> 
   filter(Q1_total != 0) |> 
   arrange(desc(Q1_total))
