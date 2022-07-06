@@ -43,6 +43,12 @@ papers <-
 researchers <- 
   read_csv("https://docs.google.com/spreadsheets/d/1mpwR15wHbrFbO1s8DWsDdLta_aou7gHD/export?format=csv&gid=2102359855") |> 
   mutate(universidad = grupo)
+
+grupo_general <- read.csv(file = 'data/grupos_general_merged.csv')
+
+grupos <- 
+  grupo_general |> 
+  select(grupo, Nombre_grupo, Linea_investigacion, Instituciones)
 ```
 
 # Análisis descriptivo 
