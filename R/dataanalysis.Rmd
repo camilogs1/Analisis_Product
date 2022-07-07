@@ -33,9 +33,17 @@ library(performance)
 library(report)
 library(plotly)
 library(nortest)
+library(here)
 ```
 
 ```{r message=FALSE, warning=FALSE, echo=FALSE}
+grupos <- read.csv(here("data", "grupos_general_merged.csv")) |> 
+  select(grupo, Nombre_grupo, Linea_investigacion, Instituciones) |>  
+  rename(nombre_grupo = Nombre_grupo, linea_investigacion = Linea_investigacion, universidad = Instituciones)
+
+universidad <- grupos |> 
+  select(grupo, universidad)
+
 papers <- 
   read_csv("https://docs.google.com/spreadsheets/d/1OFg9Jzypg_uwsmFxyXFSgtdfXfgsN9AG/export?format=csv&gid=808772593") |> 
   filter(ano > 2014) 
@@ -44,11 +52,12 @@ researchers <-
   read_csv("https://docs.google.com/spreadsheets/d/1mpwR15wHbrFbO1s8DWsDdLta_aou7gHD/export?format=csv&gid=2102359855") |> 
   mutate(universidad = grupo)
 
-grupo_general <- read.csv(file = 'data/grupos_general_merged.csv')
+papers <- merge(papers, grupos,
+                 by = c("grupo")) 
 
-grupos <- 
-  grupo_general |> 
-  select(grupo, Nombre_grupo, Linea_investigacion, Instituciones)
+# researchers <- merge(researchers, grupos,
+#                      by = c("grupo")) |> 
+#   rename(universidad = instituciones) 
 ```
 
 # Análisis descriptivo 
@@ -86,7 +95,6 @@ fig <- plot_ly(authors_others, x = ~ano,y = ~otra, type = 'bar',
   layout(xaxis = list(title="Año"),
   yaxis = list(title='Investigadores'), barmode = 'group')
 fig
-
 ```
 
 ## Calidad de producción anual
@@ -160,10 +168,9 @@ edges <-
 
 graph_from_data_frame(d = edges, 
                       directed = FALSE, 
-                      vertices = nodes) 
-# |> 
-#   write_graph("output/academic_social_network.graphml", 
-#               "graphml")
+                      vertices = nodes) |>
+  write_graph("output/academic_social_network.graphml",
+              "graphml")
 
 ```
 
@@ -231,21 +238,29 @@ authors_graph_tbl |>
 Estos análisis se sitúan entre 2016 y 2021. Queremos ver la calidad
 
 ```{r, echo=FALSE}
+grupo <- grupos |> 
+  select(grupo, nombre_grupo, universidad)
+
 researchers_1 <-  
   researchers |> 
   select(integrantes, grupo) |> 
   separate_rows(grupo, sep = "; ") |> 
-  mutate(grupo = as.numeric(grupo))
+  mutate(grupo = as.numeric(grupo)) |> 
+  left_join(researchers_1, grupo)
 
 papers_1 <- # We need to split autores from papers
   papers |> 
   select(grupo,
+         nombre_grupo,
+         universidad,
          categoria_revista, 
          SJR_Q , 
          ano, 
          autores) |> 
   separate_rows(autores, sep = ", ") |>  # Separate researchers 
   select(grupo,
+         nombre_grupo,
+         universidad,
          integrantes = autores, 
          ano, 
          categoria_revista, 
