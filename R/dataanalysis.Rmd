@@ -49,15 +49,37 @@ papers <-
   filter(ano > 2014) 
 
 researchers <- 
-  read_csv("https://docs.google.com/spreadsheets/d/1mpwR15wHbrFbO1s8DWsDdLta_aou7gHD/export?format=csv&gid=2102359855") |> 
-  mutate(universidad = grupo)
+  read_csv("https://docs.google.com/spreadsheets/d/1mpwR15wHbrFbO1s8DWsDdLta_aou7gHD/export?format=csv&gid=2102359855") 
 
 papers <- merge(papers, grupos,
                  by = c("grupo")) 
 
-# researchers <- merge(researchers, grupos,
-#                      by = c("grupo")) |> 
-#   rename(universidad = instituciones) 
+researchers <- researchers |> 
+  separate_rows(grupo, sep = "; ") |> 
+  mutate(grupo = as.integer(grupo)) |> 
+   left_join(grupos |> select(grupo, nombre_grupo, universidad),
+                     by = c("grupo")) |> 
+  group_by(integrantes,
+           vinculacion,
+           horas_dedicacion,
+           url,
+           inicio_vinculacion,
+           fin_vinculacion,
+           posgrade,
+           clasification,
+           articulos,
+           capitulos,
+           libros,
+           softwares,
+           innovaciones,
+           trabajos_dirigidos) |> 
+  mutate(grupo = paste0(grupo,
+                        collapse = "; "),
+         nombre_grupo = paste0(nombre_grupo,
+                               collapse = "; "),
+         universidad = paste0(universidad,
+                              collapse = "; ")) |> 
+  unique()
 ```
 
 # Análisis descriptivo 
@@ -145,7 +167,7 @@ authors_graph_tbl <-
   convert(to_simple) |> 
   activate(nodes) |> 
   left_join(researchers |> 
-              select(integrantes, universidad, grupo), 
+              dplyr::select(integrantes, universidad, grupo), 
             by = c("name" = "integrantes")) |>
   mutate(universidad = if_else(is.na(universidad), "otra", universidad),
          grupo = if_else(is.na(grupo), "Externo", grupo),
@@ -168,10 +190,9 @@ edges <-
 
 graph_from_data_frame(d = edges, 
                       directed = FALSE, 
-                      vertices = nodes) 
-# |>
-#   write_graph("output/academic_social_network.graphml",
-#               "graphml")
+                      vertices = nodes) |>
+  write_graph("output/academic_social_network.graphml",
+              "graphml")
 
 ```
 
