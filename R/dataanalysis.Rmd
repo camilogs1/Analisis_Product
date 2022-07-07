@@ -246,7 +246,7 @@ researchers_1 <-
   select(integrantes, grupo) |> 
   separate_rows(grupo, sep = "; ") |> 
   mutate(grupo = as.numeric(grupo)) |> 
-  left_join(researchers_1, grupo)
+  left_join(grupo)
 
 papers_1 <- # We need to split autores from papers
   papers |> 
@@ -269,13 +269,16 @@ papers_1 <- # We need to split autores from papers
 paper_publindex <- 
   researchers_1 |> 
   left_join(papers_1, by = c("integrantes" = "integrantes", 
-                             "grupo" = "grupo")) |> 
+                             "nombre_grupo" = "nombre_grupo",
+                             "universidad" = "universidad")) |> 
   select(integrantes,
-         grupo,
+         nombre_grupo,
+         universidad,
          ano, 
          categoria_revista) |> 
   group_by(integrantes,
-           grupo,
+           nombre_grupo,
+           universidad,
            ano) |> 
   count(categoria_revista) |> 
   pivot_wider(names_from = categoria_revista, 
@@ -285,19 +288,22 @@ paper_publindex <-
                   C = 0, 
                   "Sin categoria" = 0, 
                   B = 0)) |> 
-  select(integrantes, grupo, ano, A1, A2, B, C, "Sin categoria") |> 
+  select(integrantes, nombre_grupo, universidad, ano, A1, A2, B, C, "Sin categoria") |> 
   arrange(desc(A1))
 
 paper_scimago <- 
   researchers_1 |> 
   left_join(papers_1, by = c("integrantes" = "integrantes", 
-                             "grupo" = "grupo")) |> 
+                             "nombre_grupo" = "nombre_grupo",
+                             "universidad" = "universidad")) |> 
   select(integrantes,
-         grupo,
+         nombre_grupo,
+         universidad,
          ano, 
          SJR_Q) |> 
   group_by(integrantes,
-           grupo,
+           nombre_grupo,
+           universidad,
            ano) |> 
   count(SJR_Q) |>
   na.omit() |> 
@@ -308,7 +314,7 @@ paper_scimago <-
                   Q3 = 0, 
                   "Sin categoria" = 0, 
                   Q4 = 0)) |> 
-  select(integrantes, grupo, ano, Q1, Q2, Q3, Q4, "Sin categoria") |> 
+  select(integrantes, nombre_grupo, universidad, ano, Q1, Q2, Q3, Q4, "Sin categoria") |> 
   arrange(desc(Q1))
 ```
 
