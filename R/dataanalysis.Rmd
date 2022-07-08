@@ -34,10 +34,11 @@ library(report)
 library(plotly)
 library(nortest)
 library(here)
+library(readr)
 ```
 
 ```{r message=FALSE, warning=FALSE, echo=FALSE}
-grupos <- read.csv(here("data", "grupos_general_merged.csv")) |> 
+grupos <- read_csv(here("data", "grupos_general_merged.csv")) |> 
   select(grupo, Nombre_grupo, Linea_investigacion, Instituciones) |>  
   rename(nombre_grupo = Nombre_grupo, linea_investigacion = Linea_investigacion, universidad = Instituciones)
 
@@ -167,10 +168,10 @@ authors_graph_tbl <-
   convert(to_simple) |> 
   activate(nodes) |> 
   left_join(researchers |> 
-              dplyr::select(integrantes, universidad, grupo), 
+              dplyr::select(integrantes, universidad, nombre_grupo), 
             by = c("name" = "integrantes")) |>
   mutate(universidad = if_else(is.na(universidad), "otra", universidad),
-         grupo = if_else(is.na(grupo), "Externo", grupo),
+         grupo = if_else(is.na(nombre_grupo), "Externo", nombre_grupo),
          components = group_components(type = "weak")) |> 
   filter(components == 1)
 ```
@@ -178,21 +179,30 @@ authors_graph_tbl <-
 ```{r, echo=FALSE}
 nodes<- 
   authors_graph_tbl |> 
-  activate(nodes) |> 
+  activate(nodes) |>
+  mutate(out_degree = centrality_degree(mode = "out"),
+         in_degree = centrality_degree(mode = "in"),
+         components = group_components()) |> 
+  filter(components == 1) |> 
+  filter(!(out_degree == 0 & in_degree == 1)) |> 
   as_tibble() |> 
   rename(author = name) |> 
   rownames_to_column("name")
+
 
 edges <- 
   authors_graph_tbl |> 
   activate(edges) |> 
   as_tibble()
 
-graph_from_data_frame(d = edges, 
+grafo <- graph_from_data_frame(d = edges, 
                       directed = FALSE, 
-                      vertices = nodes) |>
+                      vertices = nodes) 
+grafo |> 
   write_graph("output/academic_social_network.graphml",
               "graphml")
+
+grafo_modularidad <- cluster_louvain(grafo)
 
 ```
 
@@ -205,9 +215,8 @@ nodes <-
   mutate(id = row_number()) |> 
   data.frame() |> 
   rename(label = name) |> 
-  select(id, label, universidad) 
-# |> 
-#   mutate(color = if_else(universidad == "ucla", "blue", "red"))
+  select(id, label, universidad) |>
+  mutate(color = if_else(universidad == "otra", "blue", "red"))
 
 edges <- 
   authors_graph_tbl |> 
