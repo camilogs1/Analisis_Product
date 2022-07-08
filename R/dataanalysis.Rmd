@@ -180,6 +180,7 @@ authors_graph_tbl <-
 nodes<- 
   authors_graph_tbl |> 
   activate(nodes) |>
+  select(-nombre_grupo) |> 
   mutate(out_degree = centrality_degree(mode = "out"),
          in_degree = centrality_degree(mode = "in"),
          components = group_components()) |> 
@@ -202,8 +203,36 @@ grafo |>
   write_graph("output/academic_social_network.graphml",
               "graphml")
 
+## Modularidad
 grafo_modularidad <- cluster_louvain(grafo)
 
+grafo_prueba$community <- grafo_modularidad$membership
+
+unique(grafo_prueba$community)
+
+## agrupacion comunidades
+data <- data.frame()
+
+for (i in unique(grafo_prueba$community)) {
+  
+  induced_subgraph(grafo_prueba, v = which(grafo_prueba$community == i))
+  
+  size <- gorder(subgraph)
+  
+  btwn <- betweenness(subgraph)
+  
+  data <- data |> 
+    bind_rows(data.frame(
+      data = i,
+      n_characters = size,
+      most_important = names(which(btwn == max(btwn)))
+    ))
+}
+
+knitr::kable(
+  data |> 
+    dplyr::select(data, n_characters, most_important)
+)
 ```
 
 Visualización de la red social académica entre los investigadores de los grupos BIOS.
