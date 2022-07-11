@@ -14,7 +14,7 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, cache=FALSE}
 library(tidyverse)
 library(tidymodels)
 library(tidygraph)
@@ -40,17 +40,15 @@ library(readr)
 ```{r message=FALSE, warning=FALSE, echo=FALSE}
 grupos <- read_csv(here("data", "grupos_general_merged.csv")) |> 
   select(grupo, Nombre_grupo, Linea_investigacion, Instituciones) |>  
-  rename(nombre_grupo = Nombre_grupo, linea_investigacion = Linea_investigacion, universidad = Instituciones)
-
-universidad <- grupos |> 
-  select(grupo, universidad)
+  rename(nombre_grupo = Nombre_grupo, linea_investigacion = Linea_investigacion, instituciones = Instituciones)
 
 papers <- 
   read_csv("https://docs.google.com/spreadsheets/d/1OFg9Jzypg_uwsmFxyXFSgtdfXfgsN9AG/export?format=csv&gid=808772593") |> 
   filter(ano > 2014) 
 
 researchers <- 
-  read_csv("https://docs.google.com/spreadsheets/d/1mpwR15wHbrFbO1s8DWsDdLta_aou7gHD/export?format=csv&gid=2102359855") 
+  read_csv("https://docs.google.com/spreadsheets/d/1mpwR15wHbrFbO1s8DWsDdLta_aou7gHD/export?format=csv&gid=2102359855") |> 
+  mutate(universidad = "bios")
 
 papers <- merge(papers, grupos,
                  by = c("grupo")) 
@@ -58,7 +56,7 @@ papers <- merge(papers, grupos,
 researchers <- researchers |> 
   separate_rows(grupo, sep = "; ") |> 
   mutate(grupo = as.integer(grupo)) |> 
-   left_join(grupos |> select(grupo, nombre_grupo, universidad),
+   left_join(grupos |> select(grupo, nombre_grupo, instituciones),
                      by = c("grupo")) |> 
   group_by(integrantes,
            vinculacion,
@@ -73,12 +71,13 @@ researchers <- researchers |>
            libros,
            softwares,
            innovaciones,
-           trabajos_dirigidos) |> 
+           trabajos_dirigidos,
+           universidad) |> 
   mutate(grupo = paste0(grupo,
                         collapse = "; "),
          nombre_grupo = paste0(nombre_grupo,
                                collapse = "; "),
-         universidad = paste0(universidad,
+         instituciones = paste0(instituciones,
                               collapse = "; ")) |> 
   unique()
 ```
@@ -87,7 +86,7 @@ researchers <- researchers |>
 
 ## Investigadores en internos y externos
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 authors_others <-
   papers |>
   select(id, autores, ano) |>
@@ -95,12 +94,12 @@ authors_others <-
   group_by(id) |>
   filter(n() > 1) |>
   left_join(researchers |>
-              select(integrantes, universidad, grupo),
+              select(integrantes, universidad, nombre_grupo),
             by = c("autores" = "integrantes")) |>
-  mutate(universidad = if_else(is.na(universidad), "otra", universidad),
-         grupo = if_else(is.na(grupo), "Externo", grupo)) |>
+  mutate(universidad = if_else(is.na(universidad), "Otra", universidad),
+         grupo = if_else(is.na(nombre_grupo), "Externo", nombre_grupo)) |>
   ungroup() |>
-  select(-id) |>
+  select(-id, -nombre_grupo) |>
   group_by(ano) |>
   count(universidad, name = "otra") |>
   mutate(universidad = paste0(otra, collapse = ",")) |>
@@ -122,7 +121,7 @@ fig
 
 ## Calidad de producción anual
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 papers |> 
   select(ano, SJR_Q) |> 
   group_by(ano, SJR_Q) |> 
@@ -145,14 +144,14 @@ papers |>
 
 Creamos la red social y revisamos sus características
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 authors_sep <-  
   papers |> 
   select(id, autores) |> 
   separate_rows(autores, sep = ", ")
 ```
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 authors_graph_tbl <- 
   papers |> 
   select(id, autores) |> 
@@ -176,16 +175,12 @@ authors_graph_tbl <-
   filter(components == 1)
 ```
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 nodes<- 
   authors_graph_tbl |> 
   activate(nodes) |>
   select(-nombre_grupo) |> 
-  mutate(out_degree = centrality_degree(mode = "out"),
-         in_degree = centrality_degree(mode = "in"),
-         components = group_components()) |> 
-  filter(components == 1) |> 
-  filter(!(out_degree == 0 & in_degree == 1)) |> 
+  mutate(community=as.character(group_louvain())) |> 
   as_tibble() |> 
   rename(author = name) |> 
   rownames_to_column("name")
@@ -196,62 +191,38 @@ edges <-
   activate(edges) |> 
   as_tibble()
 
-grafo <- graph_from_data_frame(d = edges, 
+graph_from_data_frame(d = edges, 
                       directed = FALSE, 
-                      vertices = nodes) 
-grafo |> 
+                      vertices = nodes) |>
   write_graph("output/academic_social_network.graphml",
               "graphml")
 
-## Modularidad
-grafo_modularidad <- cluster_louvain(grafo)
-
-grafo_prueba$community <- grafo_modularidad$membership
-
-unique(grafo_prueba$community)
-
-## agrupacion comunidades
-data <- data.frame()
-
-for (i in unique(grafo_prueba$community)) {
-  
-  induced_subgraph(grafo_prueba, v = which(grafo_prueba$community == i))
-  
-  size <- gorder(subgraph)
-  
-  btwn <- betweenness(subgraph)
-  
-  data <- data |> 
-    bind_rows(data.frame(
-      data = i,
-      n_characters = size,
-      most_important = names(which(btwn == max(btwn)))
-    ))
-}
-
-knitr::kable(
-  data |> 
-    dplyr::select(data, n_characters, most_important)
-)
 ```
 
 Visualización de la red social académica entre los investigadores de los grupos BIOS.
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 nodes <- 
   authors_graph_tbl |> 
   activate(nodes) |>
+  mutate(community=as.character(group_louvain())) |>
   mutate(id = row_number()) |> 
   data.frame() |> 
   rename(label = name) |> 
-  select(id, label, universidad) |>
-  mutate(color = if_else(universidad == "otra", "blue", "red"))
+  select(id, label, universidad, community) |>
+  mutate(color = if_else(universidad == "otra", "blue", "red")) 
 
 edges <- 
   authors_graph_tbl |> 
   activate(edges) |> 
   data.frame() |> 
   select(from, to) 
+
+graph_from_data_frame(d = edges, 
+                      directed = FALSE, 
+                      vertices = nodes) |>
+  write_graph("output/academic_social_network_universidades.graphml",
+              "graphml")
 
 visNetwork(nodes = nodes, 
            edges = edges, 
@@ -267,7 +238,7 @@ visNetwork(nodes = nodes,
 
 Buscamos los investigadores más populares de acuerdo a la cantidad de conexiones que han generado.
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 authors_graph_tbl |> 
   activate(nodes) |> 
   mutate(degree = centrality_degree(), 
@@ -297,26 +268,30 @@ authors_graph_tbl |>
 
 Estos análisis se sitúan entre 2016 y 2021. Queremos ver la calidad
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 grupo <- grupos |> 
-  select(grupo, nombre_grupo, universidad)
+  select(grupo, nombre_grupo, instituciones)
 
-researchers_1 <-  
-  researchers |> 
+researchers_1 <- researchers |> 
   select(integrantes, grupo) |> 
   separate_rows(grupo, sep = "; ") |> 
   mutate(grupo = as.numeric(grupo)) |> 
-  left_join(grupo)
+  left_join(grupo) |> 
+  select(-universidad) |> 
+  mutate(universidad = instituciones) |> 
+  select(-instituciones)
 
 papers_1 <- # We need to split autores from papers
   papers |> 
   select(grupo,
          nombre_grupo,
-         universidad,
+         instituciones,
          categoria_revista, 
          SJR_Q , 
          ano, 
          autores) |> 
+  mutate(universidad = instituciones) |> 
+  select(-instituciones) |> 
   separate_rows(autores, sep = ", ") |>  # Separate researchers 
   select(grupo,
          nombre_grupo,
@@ -382,7 +357,7 @@ paper_scimago <-
 
 Producción top de los 10 mejores investigadores
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 q1_top <- 
   paper_scimago |> 
   filter(ano >= 2016) |> 
@@ -448,7 +423,7 @@ top_researchers |>
 
 ## Publindex producción
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 paper_publindex |> 
   DT::datatable(class = "cell-border stripe", 
                 rownames = F, 
@@ -467,7 +442,7 @@ paper_publindex |>
 
 Tabla
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 paper_scimago |> 
   DT::datatable(class = "cell-border stripe", 
                 rownames = F, 
