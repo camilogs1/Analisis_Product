@@ -176,14 +176,14 @@ authors_graph_tbl <-
 ```
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
-nodes<- 
+nodes <- 
   authors_graph_tbl |> 
   activate(nodes) |>
-  select(-nombre_grupo) |> 
-  mutate(community=as.character(group_louvain())) |> 
-  as_tibble() |> 
-  rename(author = name) |> 
-  rownames_to_column("name")
+  mutate(community=as.character(group_louvain())) |>
+  mutate(id = row_number()) |> 
+  data.frame() |> 
+  rename(label = name) |> 
+  select(id, label, universidad, nombre_grupo, community)
 
 
 edges <- 
