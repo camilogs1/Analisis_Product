@@ -174,6 +174,21 @@ authors_graph_tbl <-
          grupo = if_else(is.na(nombre_grupo), "Externo", nombre_grupo),
          components = group_components(type = "weak")) |> 
   filter(components == 1)
+
+universidad_graph_tbl <- 
+  papers |> 
+  select(id, instituciones) |> 
+  separate_rows(instituciones, sep = ", ") |> 
+  group_by(id) |> 
+  filter(n() > 1) |> 
+  expand(from = instituciones, to = instituciones) |> 
+  filter(from != to) |> 
+  ungroup() |> 
+  select(-id) |> 
+  graph_from_data_frame(directed = FALSE) |> 
+  as_tbl_graph() |> 
+  convert(to_simple) |> 
+  activate(nodes) 
 ```
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
@@ -203,30 +218,29 @@ edges <-
 Visualización de la red social académica entre los investigadores de los grupos BIOS.
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
-nodes <- 
-  authors_graph_tbl |> 
+nodes_u <- 
+  universidad_graph_tbl |> 
   activate(nodes) |>
   mutate(community=as.character(group_louvain())) |>
   mutate(id = row_number()) |> 
   data.frame() |> 
   rename(label = name) |> 
-  select(id, label, universidad, community) |>
-  mutate(color = if_else(universidad == "otra", "blue", "red")) 
+  select(id, label, community) 
 
-edges <- 
-  authors_graph_tbl |> 
+edges_u <- 
+  universidad_graph_tbl |> 
   activate(edges) |> 
   data.frame() |> 
   select(from, to) 
 
-# graph_from_data_frame(d = edges, 
-#                       directed = FALSE, 
-#                       vertices = nodes) |>
-#   write_graph("output/academic_social_network_universidades.graphml",
-#               "graphml")
+graph_from_data_frame(d = edges_u,
+                      directed = FALSE,
+                      vertices = nodes_u) |>
+  write_graph("output/academic_social_network_instituciones.graphml",
+              "graphml")
 # 
-# visNetwork(nodes = nodes, 
-#            edges = edges, 
+# visNetwork(nodes = nodes_u, 
+#            edges = edges_u, 
 #            height = "500px") |>
 #   visIgraphLayout(layout = "layout_with_fr") |> 
 #   visOptions(highlightNearest = TRUE, selectedBy = "label" ) |> 
