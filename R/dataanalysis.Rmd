@@ -143,8 +143,6 @@ papers |>
 
 Creamos la red social y revisamos sus características
 
-![](images/analisis_descriptivo.svg)
-
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 authors_sep <-  
   papers |> 
@@ -215,8 +213,6 @@ edges <-
 
 ```
 
-Visualización de la red social académica entre los investigadores de los grupos BIOS.
-
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 nodes_u <- 
   universidad_graph_tbl |> 
@@ -233,19 +229,20 @@ edges_u <-
   data.frame() |> 
   select(from, to) 
 
-graph_from_data_frame(d = edges_u,
-                      directed = FALSE,
-                      vertices = nodes_u) |>
-  write_graph("output/academic_social_network_instituciones.graphml",
-              "graphml")
-# 
-# visNetwork(nodes = nodes_u, 
-#            edges = edges_u, 
-#            height = "500px") |>
-#   visIgraphLayout(layout = "layout_with_fr") |> 
-#   visOptions(highlightNearest = TRUE, selectedBy = "label" ) |> 
-#   visInteraction(navigationButtons = TRUE, multiselect = TRUE)
+# graph_from_data_frame(d = edges_u,
+#                       directed = FALSE,
+#                       vertices = nodes_u) |>
+#   write_graph("output/academic_social_network_instituciones.graphml",
+#               "graphml")
 ```
+
+Visualización de la red social académica entre los investigadores de los grupos BIOS.
+
+![](images/analisis_descriptivo_autores.svg)
+
+Visualización de la red social académica entre las instituciones de los grupos BIOS.
+
+![](images/analisis_descriptivo_instituciones.svg)
 
 ### Características globales
 
