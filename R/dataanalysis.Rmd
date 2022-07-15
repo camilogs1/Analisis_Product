@@ -240,7 +240,7 @@ edges_u <-
 
 Visualización de la red social académica entre los investigadores de los grupos BIOS.
 
-![](images/analisis_descriptivo_autores.svg)
+![](images/analisis_autores-01.svg)
 
 Buscamos los investigadores más populares de acuerdo a la cantidad de conexiones que han generado.
 
@@ -274,7 +274,7 @@ authors_graph_tbl |>
 
 Visualización de la red social académica entre las instituciones de los grupos BIOS.
 
-![](images/analisis_descriptivo_instituciones.svg)
+![](images/analisis_instituciones.svg)
 
 Buscamos las instituciones más populares de acuerdo a la cantidad de conexiones que han generado.
 
