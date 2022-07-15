@@ -236,17 +236,11 @@ edges_u <-
 #               "graphml")
 ```
 
+## Colaboración científica entre autores
+
 Visualización de la red social académica entre los investigadores de los grupos BIOS.
 
 ![](images/analisis_descriptivo_autores.svg)
-
-Visualización de la red social académica entre las instituciones de los grupos BIOS.
-
-![](images/analisis_descriptivo_instituciones.svg)
-
-### Características globales
-
-### Características locales
 
 Buscamos los investigadores más populares de acuerdo a la cantidad de conexiones que han generado.
 
@@ -263,6 +257,38 @@ authors_graph_tbl |>
          Grado = degree,
          "Intermediación" = betweenness,
          Cluster = components) |>
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+```
+
+## Colaboración científica entre instituciones
+
+Visualización de la red social académica entre las instituciones de los grupos BIOS.
+
+![](images/analisis_descriptivo_instituciones.svg)
+
+Buscamos las instituciones más populares de acuerdo a la cantidad de conexiones que han generado.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+universidad_graph_tbl|> 
+  activate(nodes) |> 
+  mutate(degree = centrality_degree(), 
+         betweenness = round(centrality_betweenness(), 
+                             digits = 2)) |>
+  arrange(desc(degree)) |> 
+  data.frame() |> 
+  select("Institucion" = name,
+         Grado = degree,
+         "Intermediación" = betweenness) |>
   DT::datatable(class = "cell-border stripe", 
                 rownames = F, 
                 filter = "top", 
