@@ -277,8 +277,13 @@ Buscamos los investigadores más populares de acuerdo a la cantidad de conexione
 ![](images/analisis_autores.svg)
 ```{r}
 #Principales nodos
+autores <- 
+  authors_graph_tbl |> 
+  activate(nodes) |>
+  mutate(community=as.character(group_louvain())) |> 
+  mutate(degree = centrality_degree())
 
-authors_graph_tbl |> 
+autores |> 
   ggraph(layout = "graphopt") +
   geom_edge_link(width = 1, 
                  colour = "lightgray") +
@@ -286,7 +291,6 @@ authors_graph_tbl |>
                       size = degree)) +
   geom_node_text(aes(label = name), repel = TRUE) +
   theme_graph()
-
 ```
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
