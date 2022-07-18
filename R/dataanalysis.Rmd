@@ -144,13 +144,6 @@ papers |>
 Creamos la red social y revisamos sus características
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
-authors_sep <-  
-  papers |> 
-  select(id, autores) |> 
-  separate_rows(autores, sep = ", ")
-```
-
-```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 authors_graph_tbl <- 
   papers |> 
   select(id, autores) |> 
@@ -185,8 +178,7 @@ universidad_graph_tbl <-
   select(-id) |> 
   graph_from_data_frame(directed = FALSE) |> 
   as_tbl_graph() |> 
-  convert(to_simple) |> 
-  activate(nodes) 
+  convert(to_simple)
 ```
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
@@ -276,21 +268,21 @@ Buscamos los investigadores más populares de acuerdo a la cantidad de conexione
 
 ![](images/analisis_autores.svg)
 ```{r}
-#Principales nodos
-autores <- 
-  authors_graph_tbl |> 
-  activate(nodes) |>
-  mutate(community=as.character(group_louvain())) |> 
-  mutate(degree = centrality_degree())
-
-autores |> 
-  ggraph(layout = "graphopt") +
-  geom_edge_link(width = 1, 
-                 colour = "lightgray") +
-  geom_node_point(aes(color = community, 
-                      size = degree)) +
-  geom_node_text(aes(label = name), repel = TRUE) +
-  theme_graph()
+# #Principales nodos
+# autores <- 
+#   authors_graph_tbl |> 
+#   activate(nodes) |>
+#   mutate(community=as.character(group_louvain())) |> 
+#   mutate(degree = centrality_degree())
+# 
+# autores |> 
+#   ggraph(layout = "graphopt") +
+#   geom_edge_link(width = 1, 
+#                  colour = "lightgray") +
+#   geom_node_point(aes(color = community, 
+#                       size = degree)) +
+#   geom_node_text(aes(label = name), repel = TRUE) +
+#   theme_graph()
 ```
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
