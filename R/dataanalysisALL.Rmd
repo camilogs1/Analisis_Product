@@ -62,35 +62,35 @@ Creamos la red social y revisamos sus características
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 # Separación autores y universidad
-# authors_list <-
-#   papers |>
-#   select(autores) |>
-#   separate_rows(autores, sep = ", ")
-# 
-# authors_list <- dplyr::distinct(authors_list)
-# 
-# universidad_list <- 
-#   papers |> 
-#   select(instituciones) |> 
-#   separate_rows(instituciones, sep = "  ") 
-# 
-# universidad_list <- dplyr::distinct(universidad_list)
+authors_list <-
+  papers |>
+  select(autores) |>
+  separate_rows(autores, sep = ", ")
+
+authors_list <- dplyr::distinct(authors_list)
+
+universidad_list <-
+  papers |>
+  select(instituciones) |>
+  separate_rows(instituciones, sep = "  ")
+
+universidad_list <- dplyr::distinct(universidad_list)
 ```
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 # Autores
-# datos_compartidos_a <- crosstalk::SharedData$new(authors_list)
-# filter_select("separacion_a", "Autores", datos_compartidos_a, ~autores)
+datos_compartidos_a <- crosstalk::SharedData$new(authors_list)
+filter_select("separacion_a", "Autores", datos_compartidos_a, ~autores)
 
-authors_opc <- str_detect(papers, 'Sebastian Robledo Giraldo')
+authors_opc <- dplyr::filter(str_detect(papers, 'Sebastian Robledo Giraldo'))
 ```
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
 # Universidades
-# datos_compartidos_u <- crosstalk::SharedData$new(universidad_list)
-# filter_select("separacion_u", "Instituciones", datos_compartidos_u, ~instituciones)
+datos_compartidos_u <- crosstalk::SharedData$new(universidad_list)
+filter_select("separacion_u", "Instituciones", datos_compartidos_u, ~instituciones)
 
-universidad_opc <- str_detect(papers, "Universidad Católica De Manizales Avalado") 
+universidad_opc1 <- dplyr::filter(str_detect(papers, "Universidad Católica De Manizales Avalado"))
 ```
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
