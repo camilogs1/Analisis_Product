@@ -1,0 +1,261 @@
+---
+title: "Análisis de la Producción científica Bios Colombia"
+author: "Camilo García"
+date: "14/08/2022"
+output: 
+  html_document:
+            toc: TRUE
+            toc_float: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, cache=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(tidygraph)
+library(igraph)
+library(DT)
+library(visNetwork)
+library(ggraph)
+library(rcrossref)
+library(purrr)
+library(vip)
+library(lubridate)
+library(yardstick)
+library(psych)
+library(bestNormalize)
+library(performance)
+library(report)
+library(plotly)
+library(nortest)
+library(here)
+library(readr)
+library(crosstalk)
+library(dplyr)
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+grupos <- read_csv(here("data", "info_grupos_merged.csv")) |> 
+  rename('codigo_grupo' = 'codigo del grupo',
+         'grupo' = 'nombre grupo')
+
+papers <- read_csv(here("data", "articulos.csv"))
+
+researchers <- read_csv(here("data", "info_integrantes.csv")) 
+
+researchers <- researchers |>  
+   left_join(grupos |> select('codigo_grupo','instituciones'),
+                     by = c("codigo_grupo")) 
+
+papers <- papers |>  
+   left_join(grupos |> select('codigo_grupo','instituciones'),
+                     by = c("codigo_grupo")) 
+```
+# Red Social Académica
+
+Creamos la red social y revisamos sus características
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+# Separación autores y universidad
+authors_list <-
+  papers |>
+  select(autores) |>
+  separate_rows(autores, sep = ", ")
+
+authors_list <- dplyr::distinct(authors_list)
+
+universidad_list <-
+  papers |>
+  select(instituciones) |>
+  separate_rows(instituciones, sep = "  ")
+
+universidad_list <- dplyr::distinct(universidad_list)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+# Autores
+datos_compartidos_a <- crosstalk::SharedData$new(authors_list)
+filter_select("separacion_a", "Autores", datos_compartidos_a, ~autores)
+
+authors_opc <- dplyr::filter(str_detect(papers, 'Sebastian Robledo Giraldo'))
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+# Universidades
+datos_compartidos_u <- crosstalk::SharedData$new(universidad_list)
+filter_select("separacion_u", "Instituciones", datos_compartidos_u, ~instituciones)
+
+universidad_opc1 <- dplyr::filter(str_detect(papers, "Universidad Católica De Manizales Avalado"))
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+colores <- rainbow(50)
+
+authors_graph_tbl <-
+  authors_opc |>
+  expand(from = autores, to = autores) |>
+  filter(from != to) |>
+  ungroup() |>
+  graph_from_data_frame(directed = FALSE) |>
+  as_tbl_graph() |>
+  convert(to_simple) |>
+  activate(nodes) |>
+  left_join(researchers |>
+              dplyr::select(nombre, instituciones, grupo),
+            by = c("name" = "nombre"))
+
+universidad_graph_tbl <- 
+  universidad_opc |> 
+  expand(from = instituciones, to = instituciones) |> 
+  filter(from != to) |> 
+  ungroup() |> 
+  graph_from_data_frame(directed = FALSE) |> 
+  as_tbl_graph() |> 
+  convert(to_simple)
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+nodes <-
+  authors_graph_tbl |>
+  activate(nodes) |>
+  mutate(community=as.character(group_louvain())) |>
+  mutate(id = row_number()) |>
+  data.frame() |>
+  rename(label = name) |>
+  select(id, label, universidad, nombre_grupo, community)
+
+
+edges <-
+  authors_graph_tbl |>
+  activate(edges) |>
+  as_tibble()
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+nodes_u <- 
+  universidad_graph_tbl |> 
+  activate(nodes) |>
+  mutate(community=as.character(group_louvain())) |>
+  mutate(id = row_number()) |> 
+  data.frame() |> 
+  rename(label = name) |> 
+  select(id, label, community) 
+
+edges_u <- 
+  universidad_graph_tbl |> 
+  activate(edges) |> 
+  data.frame() |> 
+  select(from, to)
+```
+
+## Colaboración científica entre instituciones
+
+Visualización de la red social académica entre las instituciones de los grupos BIOS.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+width = c()
+for(i in edges_u$strength){
+  width <- append(width, length(i))
+}
+width = as.data.frame(width)
+edges_2 <- cbind(edges_u, width)|> 
+  mutate(width = width*5)
+net_u <- visNetwork(nodes = nodes_u, 
+           edges = edges_2, 
+           width = "100%") |> 
+  visExport() |> 
+  visLegend() |> 
+  visOptions(highlightNearest = list(enabled = T, degree = 1, hover = T),
+             nodesIdSelection = TRUE,
+             selectedBy = "community") |>
+  visPhysics(solver ='forceAtlas2Based', 
+             stabilization = FALSE)
+net_u
+net_u |> visSave(file = "network_instituciones.html", background = "white")
+```
+
+Buscamos las instituciones más populares de acuerdo a la cantidad de conexiones que han generado.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+universidad_graph_tbl|> 
+  activate(nodes) |> 
+  mutate(degree = centrality_degree(), 
+         betweenness = round(centrality_betweenness(), 
+                             digits = 2)) |>
+  arrange(desc(degree)) |> 
+  data.frame() |> 
+  select("Institucion" = name,
+         Grado = degree,
+         "Intermediación" = betweenness) |>
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+```
+
+## Colaboración científica entre autores
+
+Visualización de la red social académica entre los investigadores de los grupos BIOS.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+width = c()
+for(i in edges$strength){
+  width <- append(width, length(i))
+}
+width = as.data.frame(width)
+edges_1 <- cbind(edges_1, width)|>
+  mutate(width = width*5)
+net_a <- visNetwork(nodes = nodes,
+           edges = edges_1,
+           width = "100%") |>
+  visExport() |>
+  visLegend() |>
+  visOptions(highlightNearest = list(enabled = T, degree = 1, hover = T),
+             nodesIdSelection = TRUE,
+             selectedBy = "community") |>
+  visPhysics(solver ='forceAtlas2Based',
+             stabilization = FALSE)
+net_a
+net_a |> visSave(file = "network_autores.html", background = "white")
+```
+
+Buscamos los investigadores más populares de acuerdo a la cantidad de conexiones que han generado.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+authors_graph_tbl |>
+  activate(nodes) |>
+  mutate(degree = centrality_degree(),
+         betweenness = round(centrality_betweenness(),
+                             digits = 2)) |>
+  arrange(desc(degree)) |>
+  data.frame() |>
+  select(Investigador = name,
+         grupo,
+         Grado = degree,
+         "Intermediación" = betweenness,
+         Cluster = components) |>
+  DT::datatable(class = "cell-border stripe",
+                rownames = F,
+                filter = "top",
+                editable = FALSE,
+                extensions = "Buttons",
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel",
+                                           "pdf",
+                                           "print")))
+```
