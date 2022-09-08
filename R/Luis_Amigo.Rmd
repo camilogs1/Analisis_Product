@@ -1,0 +1,388 @@
+---
+title: "Análisis de la Producción científica Universidad Católica Luis Amigó"
+author: "Camilo García"
+date: "08/09/2022"
+output: 
+  html_document:
+            toc: TRUE
+            toc_float: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, cache=FALSE}
+library(DT)
+library(visNetwork)
+library(ggraph)
+library(plotly)
+library(datasets)
+library(tidyverse)
+library(tidymodels)
+library(tidygraph)
+library(igraph)
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+papers <- 
+  read_csv("https://docs.google.com/spreadsheets/d/17b_d24WF2dRBedatAqgArWodAaAn6-o0/export?format=csv&gid=1924642330") |> 
+  filter(ano > 2014) 
+
+researchers <- 
+  read_csv("https://docs.google.com/spreadsheets/d/17b_d24WF2dRBedatAqgArWodAaAn6-o0/export?format=csv&gid=1531675683") |> 
+  mutate(universidad = "ucla")
+```
+
+# Análisis descriptivo
+
+## Investigadores en internos y externos
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+authors_ucla_others <- 
+  papers |> 
+  select(id, autores, ano) |> 
+  separate_rows(autores, sep = ", ") |> 
+  group_by(id) |> 
+  filter(n() > 1) |> 
+  left_join(researchers |> 
+              select(integrantes, universidad, grupo), 
+            by = c("autores" = "integrantes")) |>
+  mutate(universidad = if_else(is.na(universidad), "otra", universidad),
+         grupo = if_else(is.na(grupo), "Sin_grupo", grupo)) |>
+  ungroup() |> 
+  select(-id) |> 
+  group_by(ano) |> 
+  count(universidad, name = "otra") |>
+  mutate(universidad = paste0(otra, collapse = ",")) |> 
+  select(ano, universidad) |> 
+  unique() |> 
+  separate(universidad, into = c("universidad", "otra"), sep = ",") |> 
+  ungroup() |> 
+  transform(ano = as.character(ano),
+            universidad = as.numeric(universidad),
+            otra = as.numeric(otra))
+fig <- plot_ly(authors_ucla_others, x = ~ano,y = ~otra, type = 'bar',
+               name ="Invertigador externo") |> 
+  add_trace(y = ~universidad, name="Universidad Luis Amigó") |> 
+  layout(xaxis = list(title="Año"),
+  yaxis = list(title='Investigadores'), barmode = 'group')
+fig
+```
+
+## Calidad de producción anual
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+papers |> 
+  select(ano, SJR_Q) |> 
+  group_by(ano, SJR_Q) |> 
+  count() |> 
+  filter(SJR_Q != "-",
+         SJR_Q != "Sin categoria") |> 
+  arrange(ano) |> 
+  rename(total = n) |> 
+  ggplot(aes(x = factor(ano), y = total, fill = SJR_Q)) +
+  geom_bar(stat = "identity", 
+           position = "dodge") +
+  geom_text(aes(label = total), 
+            vjust = 1.5,
+            position = position_dodge(.9)) +
+  theme_bw()
+```
+
+# Red Social Académica
+
+Creamos la red social y revisamos sus características
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+authors_sep <-  
+  papers |> 
+  select(id, autores) |> 
+  separate_rows(autores, sep = ", ")
+
+authors_graph_tbl <- 
+  papers |> 
+  select(id, autores) |> 
+  separate_rows(autores, sep = ", ") |> 
+  group_by(id) |> 
+  filter(n() > 1) |> 
+  expand(from = autores, to = autores) |> 
+  filter(from != to) |> 
+  ungroup() |> 
+  select(-id) |> 
+  graph_from_data_frame(directed = FALSE) |> 
+  as_tbl_graph() |> 
+  convert(to_simple) |> 
+  activate(nodes) |> 
+  left_join(researchers |> 
+              select(integrantes, universidad, grupo), 
+            by = c("name" = "integrantes")) |>
+  mutate(universidad = if_else(is.na(universidad), "otra", universidad),
+         grupo = if_else(is.na(grupo), "Sin_grupo", grupo),
+         components = group_components(type = "weak")) |> 
+  filter(components == 1)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+colores <- c(palette("R3"),palette("Dark2"),palette("alphabet"))
+
+nodes <- 
+  authors_graph_tbl |> 
+  activate(nodes) |>
+  mutate(community=as.character(group_louvain())) |>
+  mutate(value = centrality_degree(),
+             value = value *5) |>
+  mutate(id = row_number()) |> 
+  data.frame() |> 
+  rename(label = name) |> 
+  mutate(color = colores[community]) |> 
+  select(id, label, grupo, community, color)
+
+
+edges <- 
+  authors_graph_tbl |> 
+  activate(nodes) |> 
+  activate(edges) |> 
+  data.frame() |> 
+  rename(strength = 3) |> 
+  select(from, to, strength) |> 
+  as_tibble()
+
+width = c()
+    for(i in edges$strength){
+      width <- append(width, length(i))
+    }
+    
+width = as.data.frame(width)
+    edges <- cbind(edges, width)|> 
+      mutate(width = width*5)
+
+visNetwork(nodes = nodes, 
+               edges = edges, 
+               width = "100%") |>
+      visLegend() |> 
+      visExport() |>
+      visOptions(highlightNearest = list(enabled = T, degree = 1, hover = T),
+                 nodesIdSelection = TRUE,
+                 selectedBy = "community") |>
+      visPhysics(solver ='forceAtlas2Based', 
+                 stabilization = FALSE)
+
+# graph_from_data_frame(d = edges, 
+#                       directed = FALSE, 
+#                       vertices = nodes) |>
+#   write_graph("output/academic_social_network.graphml",
+#               "graphml")
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+authors_graph_tbl |> 
+  activate(nodes) |> 
+  mutate(degree = centrality_degree(), 
+         betweenness = round(centrality_betweenness(), 
+                             digits = 2)) |>
+  arrange(desc(degree)) |> 
+  data.frame() |> 
+  select(Investigador = name,
+         grupo,
+         Grado = degree,
+         "Intermediación" = betweenness,
+         Cluster = components) |>
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+```
+
+# Investigadores más productivos
+
+Estos análisis se sitúan entre 2016 y 2021. Queremos ver la calidad
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+researchers_1 <-  
+  researchers |> 
+  select(integrantes, grupo)
+papers_1 <- # We need to split autores from papers
+  papers |> 
+  select(grupo,
+         categoria_revista, 
+         SJR_Q , 
+         ano, 
+         autores) |> 
+  separate_rows(autores, sep = ", ") |>  # Separate researchers 
+  select(grupo,
+         integrantes = autores, 
+         ano, 
+         categoria_revista, 
+         SJR_Q)
+paper_publindex <- 
+  researchers_1 |> 
+  left_join(papers_1, by = c("integrantes" = "integrantes", 
+                             "grupo" = "grupo")) |> 
+  select(integrantes,
+         ano, 
+         categoria_revista) |> 
+  group_by(integrantes, 
+           ano) |> 
+  count(categoria_revista) |> 
+  pivot_wider(names_from = categoria_revista, 
+              values_from = n) |> 
+  replace_na(list(A1 = 0, 
+                  A2 = 0, 
+                  C = 0, 
+                  "Sin categoria" = 0, 
+                  B = 0)) |> 
+  select(integrantes, ano, A1, A2, B, C, "Sin categoria") |> 
+  arrange(desc(A1))
+paper_scimago <- 
+  researchers_1 |> 
+  left_join(papers_1, by = c("integrantes" = "integrantes", 
+                             "grupo" = "grupo")) |> 
+  select(integrantes,
+         ano, 
+         SJR_Q) |> 
+  group_by(integrantes, 
+           ano) |> 
+  count(SJR_Q) |>
+  na.omit() |> 
+  pivot_wider(names_from = SJR_Q, 
+              values_from = n) |> 
+  replace_na(list(Q1 = 0, 
+                  Q2 = 0, 
+                  Q3 = 0, 
+                  "Sin categoria" = 0, 
+                  Q4 = 0)) |> 
+  select(integrantes, ano, Q1, Q2, Q3, Q4, "Sin categoria") |> 
+  arrange(desc(Q1))
+```
+
+## Producción general
+
+Producción top de los 10 mejores investigadores
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+q1_top <- 
+  paper_scimago |> 
+  filter(ano >= 2016) |> 
+  group_by(integrantes) |> 
+  summarise(Q1_total = sum(Q1)) |> 
+  filter(Q1_total != 0) |> 
+  arrange(desc(Q1_total))
+q2_top <- 
+  paper_scimago |> 
+  filter(ano >= 2016) |> 
+  group_by(integrantes) |> 
+  summarise(Q2_total = sum(Q2)) |> 
+  filter(Q2_total != 0) |> 
+  arrange(desc(Q2_total))
+a1_top <- 
+  paper_publindex |> 
+  filter(ano >= 1016) |> 
+  group_by(integrantes) |> 
+  summarise(A1_total = sum(A1)) |> 
+  filter(A1_total != 0) |> 
+  arrange(desc(A1_total))
+a2_top <- 
+  paper_publindex |> 
+  filter(ano >= 2016) |> 
+  group_by(integrantes) |> 
+  summarise(A2_total = sum(A2)) |> 
+  filter(A2_total != 0) |> 
+  arrange(desc(A2_total))
+# Merging all datasets
+top_researchers <- 
+  q1_top |> 
+  left_join(q2_top, by = "integrantes") |> 
+  left_join(a1_top, by = "integrantes") |> 
+  left_join(a2_top, by = "integrantes") |> 
+  rename(Q1 = Q1_total,
+         Q2 = Q2_total,
+         A1 = A1_total,
+         A2 = A2_total) |> 
+  replace_na(replace = list(Q1 = 0,
+                            Q2 = 0,
+                            A1 = 0,
+                            A2 = 0))
+top_researchers |> 
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+```
+
+## Publindex producción
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+paper_publindex |> 
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+```
+
+## Scimago producción
+
+Tabla
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+paper_scimago |> 
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+```
+
+# Hipótesis modelos de regresión
+
+## Hipótesis 2
+La clasificación de los investigadores influye positivamente en la cantidad de la producción científica.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+paper_h1 <- researchers |> 
+  select(integrantes, grupo, posgrade, clasification, articulos)
+
+paper_h1 |> 
+  DT::datatable(class = "cell-border stripe", 
+                rownames = F, 
+                filter = "top", 
+                editable = FALSE, 
+                extensions = "Buttons", 
+                options = list(dom = "Bfrtip",
+                               buttons = c("copy",
+                                           "csv",
+                                           "excel", 
+                                           "pdf", 
+                                           "print")))
+```
+
